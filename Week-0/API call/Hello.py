@@ -11,9 +11,6 @@ response = client.chat.completions.create(
     messages=[{
         "role": "user",
         "content": "What is Generative AI in exactly 2 sentences?"
-    },{
-         "role" : "user",
-        "content": "Explain difference array algorithm"
     }]
 )
 
