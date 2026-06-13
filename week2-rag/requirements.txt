@@ -1,0 +1,18 @@
+# UI & Environment
+gradio>=5.0.0
+python-dotenv
+
+# LangChain Ecosystem
+langchain
+langchain-community
+langchain-text-splitters
+
+# PDF Processing
+pypdf
+
+# Vector Database & Embeddings
+chromadb
+sentence-transformers
+
+# LLM Provider
+groq
