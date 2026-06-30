@@ -1,8 +1,5 @@
 import os
-import shutil
 import gradio as gr
-import gc      
-import time    
 from dotenv import load_dotenv
 
 # Load environment variables securely
@@ -10,11 +7,11 @@ load_dotenv()
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings # UPDATED IMPORT
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_groq import ChatGroq
 
-# Initialize LangChain's Groq wrapper instead
+# Initialize LangChain's Groq wrapper
 llm = ChatGroq(
     model="llama-3.3-70b-versatile",
     temperature=0,
@@ -23,7 +20,7 @@ llm = ChatGroq(
 
 PERSIST_DIR = "./chroma_store"
 
-# UPDATED EMBEDDING CALL
+# Embedding model
 embedding_model = HuggingFaceEmbeddings(
     model_name="all-MiniLM-L6-v2",
     model_kwargs={"device": "cpu"}
@@ -116,21 +113,19 @@ def ask(user_question, chat_history, selected_doc):
     chat_history.append({"role": "user", "content": user_question})
     chat_history.append({"role": "assistant", "content": ""})
 
-    # 🌟 NEW ADDITION: Smart Greeting Bypass
+    # Smart Greeting Bypass
     greetings = ["hi", "hello", "hey", "greetings", "who are you", "how are you"]
     if user_question.strip().lower() in greetings:
         reply = "👋 Hello there! I am **DocBuddy Pro**, your AI research assistant. Make sure your documents are indexed on the left, then ask me anything about them!"
         chat_history[-1]["content"] = reply
         yield gr.update(value=""), chat_history, "No context needed for greetings."
         return
-    # 🌟 END OF NEW ADDITION
 
     if not vectorstore:
         chat_history[-1]["content"] = "⚠️ Please upload and index a document first!"
         yield gr.update(value=""), chat_history, "No context available."
         return
         
-
     search_kwargs = {"k": 5}
     if selected_doc and selected_doc != "All Documents":
         search_kwargs["filter"] = {"source": selected_doc}
@@ -171,7 +166,6 @@ def ask(user_question, chat_history, selected_doc):
         response_stream = llm.stream(messages)
         
         for chunk in response_stream:
-            # LangChain standardizes the output, so we just call .content
             if chunk.content:
                 chat_history[-1]["content"] += chunk.content
                 yield gr.update(value=""), chat_history, display_context
@@ -180,55 +174,23 @@ def ask(user_question, chat_history, selected_doc):
         chat_history[-1]["content"] = f"❌ AI Error: {str(e)}"
         yield gr.update(value=""), chat_history, display_context
 
-def delete_database():
-    """Wipes the ChromaDB directory and resets global variables."""
-    global vectorstore, db_initialized, existing_sources
-    
-    # 1. The Database Way: Tell Chroma to empty itself first
-    if vectorstore is not None:
-        try:
-            vectorstore.delete_collection()
-        except Exception:
-            pass # Ignore if collection already doesn't exist
-            
-    # 2. Clear memory references
-    vectorstore = None
-    db_initialized = False
-    existing_sources = ["All Documents"]
-    
-    # 3. THE WINDOWS FIX: Force Python to close lingering file handles
-    gc.collect()
-    time.sleep(0.5) # Give Windows half a second to release the locks
-    
-    # 4. Physically delete the directory if it exists
-    if os.path.exists(PERSIST_DIR):
-        try:
-            shutil.rmtree(PERSIST_DIR) 
-            print("🗑️ Database physically deleted from disk.")
-            status_msg = "🗑️ Database wiped clean. Please upload new documents."
-        except Exception as e:
-            print(f"⚠️ Error deleting database folder: {e}")
-            status_msg = f"⚠️ Error clearing database: {str(e)}"
-    else:
-        status_msg = "ℹ️ Database is already empty."
-
-    return status_msg, gr.update(choices=["All Documents"], value="All Documents"), gr.update(value=None)
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. GRADIO USER INTERFACE
 # ═══════════════════════════════════════════════════════════════════════════
 
-custom_theme = gr.themes.Monochrome(
-    primary_hue="indigo", 
-    secondary_hue="blue",
-    font=[gr.themes.GoogleFont("Inter"), "system-ui", "sans-serif"]
+# ✨ NEW ATTRACTIVE THEME WITH STYLISH FONTS ✨
+custom_theme = gr.themes.Soft(
+    primary_hue="violet", 
+    secondary_hue="indigo",
+    font=[gr.themes.GoogleFont("Poppins"), "ui-sans-serif", "system-ui", "sans-serif"],
+    font_mono=[gr.themes.GoogleFont("JetBrains Mono"), "ui-monospace", "Consolas", "monospace"],
 )
 
-# FIXED: Removed 'theme' from gr.Blocks() constructor for Gradio 6.0
 with gr.Blocks(title="DocBuddy Pro") as demo:
     gr.HTML("""
     <div style="text-align: center; max-width: 800px; margin: 0 auto; padding-bottom: 20px;">
-        <h1 style="font-weight: 800; font-size: 2.5rem; margin-bottom: 0;">📚 DocBuddy Pro</h1>
-        <p style="font-size: 1.1rem; color: #555;">Multi-Document Intelligence & Hallucination-Free Retrieval</p>
+        <h1 style="font-weight: 800; font-size: 2.8rem; margin-bottom: 0;">📚 DocBuddy Pro</h1>
+        <p style="font-size: 1.15rem; color: #6b7280; margin-top: 8px;">Multi-Document Intelligence & Hallucination-Free Retrieval</p>
     </div>
     """)
     
@@ -237,10 +199,8 @@ with gr.Blocks(title="DocBuddy Pro") as demo:
             gr.Markdown("### ⚙️ Engine Bay")
             file_upload = gr.File(label="Upload Knowledge Base (PDFs)", file_count="multiple", file_types=[".pdf"])
             
-            with gr.Row():
-                index_btn = gr.Button("⚡ Index Documents", variant="primary", scale=2)
-                clear_btn = gr.Button("🗑️ Clear Database", variant="stop", scale=1) # ADD THIS BUTTON
-
+            # Single prominent index button
+            index_btn = gr.Button("⚡ Index Documents", variant="primary")
             
             status_label = gr.Label(
                 value="Database Ready" if db_initialized else "No documents indexed yet.", 
@@ -268,8 +228,11 @@ with gr.Blocks(title="DocBuddy Pro") as demo:
                 info="Force the AI to only read from a specific document."
             )
             
-            # FIXED: Removed 'type="messages"' as it is not allowed/is default in Gradio 6.0
-            chatbot = gr.Chatbot(height=550)
+            # Default welcome message
+            chatbot = gr.Chatbot(
+                value=[{"role": "assistant", "content": "👋 **Hello! I am DocBuddy Pro.**\n\nI am your elite, hallucination-free research assistant. Please upload and index your PDFs in the Engine Bay on the left. Once ready, ask me any question and I will provide precise answers with exact page citations!"}],
+                height=550
+            )
             
             with gr.Row():
                 msg_input = gr.Textbox(
@@ -289,12 +252,6 @@ with gr.Blocks(title="DocBuddy Pro") as demo:
         outputs=[status_label, doc_filter, analytics_table]
     )
     
-    clear_btn.click(
-        fn=delete_database,
-        inputs=None,
-        outputs=[status_label, doc_filter, analytics_table]
-    )
-    
     msg_input.submit(
         fn=ask,
         inputs=[msg_input, chatbot, doc_filter],
@@ -308,5 +265,4 @@ with gr.Blocks(title="DocBuddy Pro") as demo:
 
 if __name__ == "__main__":
     print("🚀 Launching DocBuddy Pro...")
-
     demo.launch(theme=custom_theme)
